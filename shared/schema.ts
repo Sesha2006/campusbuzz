@@ -1,4 +1,5 @@
 import { pgTable, text, serial, integer, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -93,6 +94,34 @@ export type InsertVerificationRequest = z.infer<typeof insertVerificationRequest
 export type ModerationLog = typeof moderationLogs.$inferSelect;
 export type InsertModerationLog = z.infer<typeof insertModerationLogSchema>;
 export type SystemStats = typeof systemStats.$inferSelect;
+
+// Database relations
+export const usersRelations = relations(users, ({ many }) => ({
+  posts: many(posts),
+  verificationRequests: many(verificationRequests),
+}));
+
+export const postsRelations = relations(posts, ({ one, many }) => ({
+  user: one(users, {
+    fields: [posts.userId],
+    references: [users.id],
+  }),
+  moderationLogs: many(moderationLogs),
+}));
+
+export const verificationRequestsRelations = relations(verificationRequests, ({ one }) => ({
+  user: one(users, {
+    fields: [verificationRequests.userId],
+    references: [users.id],
+  }),
+}));
+
+export const moderationLogsRelations = relations(moderationLogs, ({ one }) => ({
+  post: one(posts, {
+    fields: [moderationLogs.postId],
+    references: [posts.id],
+  }),
+}));
 
 // Domain validation schema
 export const emailDomainSchema = z.object({

@@ -4,6 +4,8 @@ import {
   type VerificationRequest, type InsertVerificationRequest,
   type ModerationLog, type InsertModerationLog, type SystemStats
 } from "@shared/schema";
+import { db } from "./db";
+import { eq, desc, and } from "drizzle-orm";
 
 export interface IStorage {
   // User operations
@@ -260,4 +262,146 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+// Database storage implementation
+export class DatabaseStorage implements IStorage {
+  async getUser(id: number): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user || undefined;
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user || undefined;
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const [user] = await db
+      .insert(users)
+      .values(insertUser)
+      .returning();
+    return user;
+  }
+
+  async updateUser(id: number, updates: Partial<User>): Promise<User | undefined> {
+    const [user] = await db
+      .update(users)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(users.id, id))
+      .returning();
+    return user || undefined;
+  }
+
+  async createVerificationRequest(insertRequest: InsertVerificationRequest): Promise<VerificationRequest> {
+    const [request] = await db
+      .insert(verificationRequests)
+      .values(insertRequest)
+      .returning();
+    return request;
+  }
+
+  async getVerificationRequests(status?: 'pending' | 'approved' | 'rejected'): Promise<VerificationRequest[]> {
+    if (status) {
+      return await db
+        .select()
+        .from(verificationRequests)
+        .where(eq(verificationRequests.status, status))
+        .orderBy(desc(verificationRequests.createdAt));
+    }
+    return await db
+      .select()
+      .from(verificationRequests)
+      .orderBy(desc(verificationRequests.createdAt));
+  }
+
+  async updateVerificationRequest(id: number, updates: Partial<VerificationRequest>): Promise<VerificationRequest | undefined> {
+    const [request] = await db
+      .update(verificationRequests)
+      .set(updates)
+      .where(eq(verificationRequests.id, id))
+      .returning();
+    return request || undefined;
+  }
+
+  async getPost(id: number): Promise<Post | undefined> {
+    const [post] = await db.select().from(posts).where(eq(posts.id, id));
+    return post || undefined;
+  }
+
+  async createPost(insertPost: InsertPost): Promise<Post> {
+    const [post] = await db
+      .insert(posts)
+      .values(insertPost)
+      .returning();
+    return post;
+  }
+
+  async updatePost(id: number, updates: Partial<Post>): Promise<Post | undefined> {
+    const [post] = await db
+      .update(posts)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(posts.id, id))
+      .returning();
+    return post || undefined;
+  }
+
+  async getPosts(status?: 'pending' | 'approved' | 'rejected' | 'flagged'): Promise<Post[]> {
+    if (status) {
+      return await db
+        .select()
+        .from(posts)
+        .where(eq(posts.moderationStatus, status))
+        .orderBy(desc(posts.createdAt));
+    }
+    return await db
+      .select()
+      .from(posts)
+      .orderBy(desc(posts.createdAt));
+  }
+
+  async createModerationLog(insertLog: InsertModerationLog): Promise<ModerationLog> {
+    const [log] = await db
+      .insert(moderationLogs)
+      .values(insertLog)
+      .returning();
+    return log;
+  }
+
+  async getModerationLogs(): Promise<ModerationLog[]> {
+    return await db
+      .select()
+      .from(moderationLogs)
+      .orderBy(desc(moderationLogs.createdAt));
+  }
+
+  async getSystemStats(): Promise<SystemStats | undefined> {
+    const [stats] = await db.select().from(systemStats).limit(1);
+    return stats || undefined;
+  }
+
+  async updateSystemStats(updates: Partial<SystemStats>): Promise<SystemStats> {
+    const existing = await this.getSystemStats();
+    
+    if (existing) {
+      const [updated] = await db
+        .update(systemStats)
+        .set({ ...updates, updatedAt: new Date() })
+        .where(eq(systemStats.id, existing.id))
+        .returning();
+      return updated;
+    } else {
+      const [created] = await db
+        .insert(systemStats)
+        .values({
+          totalUsers: 0,
+          pendingVerifications: 0,
+          activeChats: 0,
+          apiRequests: 0,
+          ...updates,
+        })
+        .returning();
+      return created;
+    }
+  }
+}
+
+export const storage = new DatabaseStorage();

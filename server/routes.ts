@@ -305,8 +305,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // User management endpoints
   app.get("/api/users", asyncHandler(async (req: any, res: any) => {
     try {
-      // In a real implementation, this would fetch from database
-      const users = []; // storage.getUsers() would be implemented
+      // For now, return empty array as we don't have a getUsers method in IStorage
+      const users: any[] = [];
       res.json({ success: true, data: users });
     } catch (error) {
       res.status(500).json({ 
@@ -347,7 +347,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/logs", asyncHandler(async (req: any, res: any) => {
     try {
       // In a real implementation, this would fetch from logging system
-      const logs = []; // Would fetch actual logs
+      const logs: any[] = []; // Would fetch actual logs
       res.json({ success: true, data: logs });
     } catch (error) {
       res.status(500).json({ 
