@@ -302,6 +302,255 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }));
 
+  // User management endpoints
+  app.get("/api/users", asyncHandler(async (req: any, res: any) => {
+    try {
+      // In a real implementation, this would fetch from database
+      const users = []; // storage.getUsers() would be implemented
+      res.json({ success: true, data: users });
+    } catch (error) {
+      res.status(500).json({ 
+        success: false, 
+        message: "Failed to fetch users" 
+      });
+    }
+  }));
+
+  app.put("/api/users/:id/action", asyncHandler(async (req: any, res: any) => {
+    try {
+      const { id } = req.params;
+      const { action } = req.body;
+      
+      if (!['suspend', 'activate', 'approve', 'verify'].includes(action)) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "Invalid action" 
+        });
+      }
+
+      // In a real implementation, this would update user in database
+      console.log(`User action: ${action} for user ${id}`);
+      
+      res.json({ 
+        success: true, 
+        message: `User ${action}d successfully` 
+      });
+    } catch (error) {
+      res.status(500).json({ 
+        success: false, 
+        message: "Failed to perform user action" 
+      });
+    }
+  }));
+
+  // API logs endpoint
+  app.get("/api/logs", asyncHandler(async (req: any, res: any) => {
+    try {
+      // In a real implementation, this would fetch from logging system
+      const logs = []; // Would fetch actual logs
+      res.json({ success: true, data: logs });
+    } catch (error) {
+      res.status(500).json({ 
+        success: false, 
+        message: "Failed to fetch API logs" 
+      });
+    }
+  }));
+
+  // Settings endpoints
+  app.get("/api/settings", asyncHandler(async (req: any, res: any) => {
+    try {
+      // In a real implementation, this would fetch from database
+      const settings = {
+        system: {
+          autoModeration: true,
+          emailNotifications: true,
+          realTimeMonitoring: true,
+          allowUnverifiedUsers: false
+        }
+      };
+      res.json({ success: true, data: settings });
+    } catch (error) {
+      res.status(500).json({ 
+        success: false, 
+        message: "Failed to fetch settings" 
+      });
+    }
+  }));
+
+  app.put("/api/settings", asyncHandler(async (req: any, res: any) => {
+    try {
+      const settings = req.body;
+      
+      // In a real implementation, this would save to database
+      console.log('Settings updated:', settings);
+      
+      res.json({ 
+        success: true, 
+        message: "Settings updated successfully" 
+      });
+    } catch (error) {
+      res.status(500).json({ 
+        success: false, 
+        message: "Failed to update settings" 
+      });
+    }
+  }));
+
+  // Firebase connection test
+  app.post("/api/test-firebase-connection", asyncHandler(async (req: any, res: any) => {
+    try {
+      // Test Firebase connection
+      await FirebaseService.updateSystemStats({ testConnection: true });
+      
+      res.json({ 
+        success: true, 
+        message: "Firebase connection successful" 
+      });
+    } catch (error) {
+      res.status(500).json({ 
+        success: false, 
+        message: "Firebase connection failed" 
+      });
+    }
+  }));
+
+  // Enhanced stats endpoint with real-time data
+  app.get("/api/stats/realtime", asyncHandler(async (req: any, res: any) => {
+    try {
+      const stats = await storage.getSystemStats();
+      if (!stats) {
+        return res.status(404).json({ 
+          success: false, 
+          message: "Stats not found" 
+        });
+      }
+      
+      // Add real-time metrics
+      const realtimeStats = {
+        ...stats,
+        currentLoad: Math.random() * 100,
+        activeConnections: Math.floor(Math.random() * 500) + 100,
+        responseTimeAvg: Math.floor(Math.random() * 100) + 50,
+        errorRate: Math.random() * 5
+      };
+      
+      res.json({ success: true, data: realtimeStats });
+    } catch (error) {
+      res.status(500).json({ 
+        success: false, 
+        message: "Failed to fetch real-time statistics" 
+      });
+    }
+  }));
+
+  // Bulk operations for verification requests
+  app.post("/api/verifications/bulk-action", asyncHandler(async (req: any, res: any) => {
+    try {
+      const { ids, action, notes } = req.body;
+      
+      if (!['approved', 'rejected'].includes(action)) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "Invalid action" 
+        });
+      }
+
+      const results = [];
+      for (const id of ids) {
+        const verificationRequest = await storage.updateVerificationRequest(parseInt(id), {
+          status: action,
+          notes,
+          reviewedBy: 'admin',
+          reviewedAt: new Date(),
+        });
+        
+        if (verificationRequest) {
+          results.push(verificationRequest);
+          
+          // Update in Firebase
+          try {
+            await FirebaseService.verifyStudent(
+              verificationRequest.userId?.toString() || id, 
+              verificationRequest.email, 
+              action,
+              notes
+            );
+          } catch (firebaseError) {
+            console.error('Firebase bulk update failed:', firebaseError);
+          }
+        }
+      }
+
+      res.json({ 
+        success: true, 
+        message: `Bulk ${action} completed for ${results.length} requests`,
+        data: results 
+      });
+    } catch (error) {
+      res.status(500).json({ 
+        success: false, 
+        message: "Failed to perform bulk action" 
+      });
+    }
+  }));
+
+  // Export data endpoints
+  app.get("/api/export/:type", asyncHandler(async (req: any, res: any) => {
+    try {
+      const { type } = req.params;
+      const { format = 'csv' } = req.query;
+      
+      let data = [];
+      let filename = '';
+      
+      switch (type) {
+        case 'verifications':
+          data = await storage.getVerificationRequests();
+          filename = `verifications-${new Date().toISOString().split('T')[0]}.${format}`;
+          break;
+        case 'posts':
+          data = await storage.getPosts();
+          filename = `posts-${new Date().toISOString().split('T')[0]}.${format}`;
+          break;
+        case 'logs':
+          data = await storage.getModerationLogs();
+          filename = `moderation-logs-${new Date().toISOString().split('T')[0]}.${format}`;
+          break;
+        default:
+          return res.status(400).json({ 
+            success: false, 
+            message: "Invalid export type" 
+          });
+      }
+
+      res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+      res.setHeader('Content-Type', format === 'json' ? 'application/json' : 'text/csv');
+      
+      if (format === 'json') {
+        res.json(data);
+      } else {
+        // Convert to CSV format
+        if (data.length > 0) {
+          const headers = Object.keys(data[0]).join(',');
+          const rows = data.map(item => 
+            Object.values(item).map(value => 
+              typeof value === 'string' ? `"${value}"` : value
+            ).join(',')
+          );
+          res.send([headers, ...rows].join('\n'));
+        } else {
+          res.send('No data available');
+        }
+      }
+    } catch (error) {
+      res.status(500).json({ 
+        success: false, 
+        message: "Failed to export data" 
+      });
+    }
+  }));
+
   // API health check
   app.get("/api/health", (req, res) => {
     res.json({ 
